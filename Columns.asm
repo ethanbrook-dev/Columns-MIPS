@@ -1,25 +1,19 @@
-################ CSC258H1F Assembly Project: Columns ##################
-# This file contains the implementation of Columns.
+##############################################################################
+# CSC258H1F Assembly Project: Columns with Keyboard Input Example
 #
-# Student 1: Ethan Brook, 1010976295
-# Student 2: [Your Name], [Student Number]
-######################## Bitmap Display Configuration ########################
-# - Unit width in pixels:       8
-# - Unit height in pixels:      8
-# - Display width in pixels:    256
-# - Display height in pixels:   256
-# - Base Address for Display:   0x10008000 ($gp)
+# Demonstrates keyboard input (detecting 'q') while preserving display memory ($gp)
 ##############################################################################
 
     .data
 ##############################################################################
-# Immutable Data
+# Hardware Addresses
 ##############################################################################
 ADDR_DSPL:
-    .word 0x10008000
-ADDR_KBRD:
-    .word 0xffff0000
+    .word 0x10008000      # Base address for display memory ($gp points here)
 
+##############################################################################
+# Game Data
+##############################################################################
 # Gem colors
 COLOR_RED:      .word 0xff0000
 COLOR_ORANGE:   .word 0xff8800  
@@ -34,183 +28,258 @@ COLOR_BORDER:   .word 0x8B4513      # Brown border
 COLOR_FIELD:    .word 0x808080      # Grey playing field
 
 # Game state
-current_column: .word 0, 0, 0  # Three gem colors for current column
-column_x:       .word 5        # starting X position
-column_y:       .word 0        # starting Y position
+current_column: .word 0, 0, 0       # Three gem colors for current column
+column_x:       .word 5             # starting X position
+column_y:       .word 0             # starting Y position
 
-##############################################################################
-# Code
-##############################################################################
     .text
     .globl main
 
+##############################################################################
+# Main Program
+##############################################################################
 main:
-    # Initialize the game
+    # Initialize display
     jal draw_black_background
     jal draw_playing_field
     jal generate_new_column
     jal draw_current_column
     
-# Main loop
-game_loop:
-    # For Milestone 1, we just keep displaying the static scene
-    j game_loop
+    j main_loop # Start the game loop
+    
+main_loop:
+    li $v0, 11
+    li $a0, 35    # print '#'
+    syscall
+    j main_loop
 
+##############################################################################
+# Handling different keyboard keys
+##############################################################################
+
+
+
+##############################################################################
+# Display / Drawing
+##############################################################################
 # Draw black background for entire screen
 draw_black_background:
-    lw $t0, ADDR_DSPL           # Base address
-    li $t1, 0                   # Pixel counter
-    lw $t2, COLOR_BG            # Black color
-    
+    lw $t2, COLOR_BG
+    move $t0, $gp            # $gp points to display memory
+    li $t1, 0
 draw_bg_loop:
-    sw $t2, 0($t0)              # Draw black pixel
+    sw $t2, 0($t0)
     addi $t0, $t0, 4
     addi $t1, $t1, 1
-    blt $t1, 1024, draw_bg_loop # 32x32 = 1024 pixels
-    
+    blt $t1, 1024, draw_bg_loop
     jr $ra
 
-# Draw the playing field with brown border and grey interior (12x24)
+# Draw playing field with brown border and grey interior
 draw_playing_field:
     lw $t0, ADDR_DSPL
-    lw $t1, COLOR_BORDER        # Brown border color
-    lw $t2, COLOR_FIELD         # Grey field color
-    
-    # Playing field dimensions: 12 units wide, 24 units long
-    li $t3, 9                   # Start X position (was 10, now 9)
-    li $t4, 4                   # Start Y position
-    li $t5, 14                  # Total width (12 + 1 pixel border each side)
-    li $t6, 26                  # Total height (24 + 1 pixel border top/bottom)
-    
-    # Calculate starting position
-    li $t7, 128                 # Bytes per row
-    mul $t8, $t4, $t7           # Y offset
-    sll $t9, $t3, 2             # X offset (*4 bytes)
+    lw $t1, COLOR_BORDER
+    lw $t2, COLOR_FIELD
+
+    li $t3, 9
+    li $t4, 4
+    li $t5, 14
+    li $t6, 26
+
+    li $t7, 128
+    mul $t8, $t4, $t7
+    sll $t9, $t3, 2
     add $t0, $t0, $t8
     add $t0, $t0, $t9
-    
-    # Draw top border
-    li $s0, 0
-    move $s1, $t0               # Save start position for this row
 
+    li $s0, 0
+    move $s1, $t0
 draw_top_border:
-    sw $t1, 0($t0)              # Draw brown border
+    sw $t1, 0($t0)
     addi $t0, $t0, 4
     addi $s0, $s0, 1
     blt $s0, $t5, draw_top_border
-    
-    # Draw sides and fill interior
-    li $s2, 1                   # Row counter (skip top border)
 
+    li $s2, 1
 draw_field_rows:
-    move $t0, $s1               # Reset to start of current row
-    mul $s3, $s2, 128           # Calculate row offset
-    add $t0, $s1, $s3           # Move to correct row
-    
-    # Left border
+    move $t0, $s1
+    mul $s3, $s2, 128
+    add $t0, $s1, $s3
     sw $t1, 0($t0)
-    
-    # Fill row with grey interior
     addi $t0, $t0, 4
-    li $s0, 1                   # Column counter
+
+    li $s0, 1
 draw_field_interior:
-    sw $t2, 0($t0)              # Draw grey field
+    sw $t2, 0($t0)
     addi $t0, $t0, 4
     addi $s0, $s0, 1
-    blt $s0, 13, draw_field_interior  # 12 units wide for interior
-    
-    # Right border
-    sw $t1, 0($t0)
-    
-    # Update for next row
-    addi $s2, $s2, 1
-    blt $s2, 25, draw_field_rows  # 24 rows of interior
-    
-    # Draw bottom border
-    move $t0, $s1               # Reset to top left
-    li $s3, 25                  # Bottom row offset (24 interior + 1 top border)
-    mul $s3, $s3, 128           # Calculate bytes to bottom
-    add $t0, $s1, $s3
-    
-    li $s0, 0
+    blt $s0, 13, draw_field_interior
 
+    sw $t1, 0($t0)
+    addi $s2, $s2, 1
+    blt $s2, 25, draw_field_rows
+
+    move $t0, $s1
+    li $s3, 25
+    mul $s3, $s3, 128
+    add $t0, $s1, $s3
+
+    li $s0, 0
 draw_bottom_border:
     sw $t1, 0($t0)
     addi $t0, $t0, 4
     addi $s0, $s0, 1
     blt $s0, $t5, draw_bottom_border
-    
+
     jr $ra
 
-# Generate a new column with three random gems
+##############################################################################
+# Generate new column
+##############################################################################
 generate_new_column:
     la $t0, current_column
-    
-    # Generate three random colors (0-5)
+
     li $v0, 42
     li $a0, 0
     li $a1, 6
     syscall
-    sw $a0, 0($t0)              # Store first gem color
-    
+    sw $a0, 0($t0)
+
     li $v0, 42
     li $a0, 0
     li $a1, 6
     syscall
-    sw $a0, 4($t0)              # Store second gem color
-    
+    sw $a0, 4($t0)
+
     li $v0, 42
     li $a0, 0
     li $a1, 6
     syscall
-    sw $a0, 8($t0)              # Store third gem color
-    
+    sw $a0, 8($t0)
+
     jr $ra
 
-# Draw the current column at its position
+##############################################################################
+# Draw current column
+##############################################################################
 draw_current_column:
     la $t0, current_column
-    lw $t1, column_x            # X position (0-11)
-    lw $t2, column_y            # Y position (0-23)
-    
-    # Calculate base position in display (inside playing field)
-    lw $t3, ADDR_DSPL
-    
-    # Calculate offset to playing field interior
-    # Field interior starts at (10, 5) - inside the border (shifted left)
-    li $t4, 5                   # Start Y of field interior
-    li $t5, 10                  # Start X of field interior (was 11, now 10)
-    
-    # Calculate final position
-    li $t6, 128                 # Bytes per row
-    add $t7, $t4, $t2           # Total Y offset
-    mul $t7, $t7, $t6           # Y offset in bytes
-    add $t8, $t5, $t1           # Total X offset
-    sll $t8, $t8, 2             # X offset in bytes (*4)
-    add $t3, $t3, $t7
-    add $t3, $t3, $t8
-    
-    # Draw three gems vertically
-    # Top gem (position 0)
-    lw $a0, 0($t0)              # Get color index
-    jal get_gem_color
-    sw $v0, 0($t3)
-    
-    # Middle gem (position 1)  
-    lw $a0, 4($t0)              # Get color index
-    jal get_gem_color
-    sw $v0, 128($t3)
-    
-    # Bottom gem (position 2)
-    lw $a0, 8($t0)              # Get color index
-    jal get_gem_color
-    sw $v0, 256($t3)
-    
-    jr $ra
+    li $v0, 11
+    li $a0, '1'
+    syscall
 
-# Get actual color value from color index
-# Input: $a0 = color index (0-5)
-# Output: $v0 = color value
+    lw $t1, column_x
+    li $v0, 11
+    li $a0, '2'
+    syscall
+
+    lw $t2, column_y
+    li $v0, 11
+    li $a0, '3'
+    syscall
+
+    lw $t3, ADDR_DSPL
+    li $v0, 11
+    li $a0, '4'
+    syscall
+
+    li $t4, 5
+    li $v0, 11
+    li $a0, '5'
+    syscall
+
+    li $t5, 10
+    li $v0, 11
+    li $a0, '6'
+    syscall
+
+    li $t6, 128
+    li $v0, 11
+    li $a0, '7'
+    syscall
+
+    add $t7, $t4, $t2
+    li $v0, 11
+    li $a0, '8'
+    syscall
+
+    mul $t7, $t7, $t6
+    li $v0, 11
+    li $a0, '9'
+    syscall
+
+    add $t8, $t5, $t1
+    li $v0, 11
+    li $a0, 'A'
+    syscall
+
+    sll $t8, $t8, 2
+    li $v0, 11
+    li $a0, 'B'
+    syscall
+
+    add $t3, $t3, $t7
+    li $v0, 11
+    li $a0, 'C'
+    syscall
+
+    add $t3, $t3, $t8
+    li $v0, 11
+    li $a0, 'D'
+    syscall
+
+    lw $a0, 0($t0)
+    li $v0, 11
+    li $a0, 'E'
+    syscall
+
+    jal get_gem_color
+    li $v0, 11
+    li $a0, 'F'
+    syscall
+
+    sw $v0, 0($t3)
+    li $v0, 11
+    li $a0, 'G'
+    syscall
+
+    lw $a0, 4($t0)
+    li $v0, 11
+    li $a0, 'H'
+    syscall
+
+    jal get_gem_color
+    li $v0, 11
+    li $a0, 'I'
+    syscall
+
+    sw $v0, 128($t3)
+    li $v0, 11
+    li $a0, 'J'
+    syscall
+
+    lw $a0, 8($t0)
+    li $v0, 11
+    li $a0, 'K'
+    syscall
+
+    jal get_gem_color
+    li $v0, 11
+    li $a0, 'L'
+    syscall
+
+    sw $v0, 256($t3)
+    li $v0, 11
+    li $a0, 'M'
+    syscall
+
+    jr $ra
+    li $v0, 11
+    li $a0, 'N'
+    syscall
+
+##############################################################################
+# Get gem color by index
+##############################################################################
 get_gem_color:
     beq $a0, 0, color_red
     beq $a0, 1, color_orange
@@ -218,7 +287,7 @@ get_gem_color:
     beq $a0, 3, color_green
     beq $a0, 4, color_blue
     beq $a0, 5, color_purple
-    
+
 color_red:
     lw $v0, COLOR_RED
     jr $ra
@@ -238,7 +307,9 @@ color_purple:
     lw $v0, COLOR_PURPLE
     jr $ra
 
-# Exit the program
+##############################################################################
+# Exit
+##############################################################################
 exit:
     li $v0, 10
     syscall
