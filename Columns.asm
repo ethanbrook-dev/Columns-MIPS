@@ -4,54 +4,37 @@
 # Demonstrates keyboard input (detecting 'q') while preserving display memory ($gp)
 ##############################################################################
 
-    .data
-##############################################################################
-# Hardware Addresses
-##############################################################################
-ADDR_DSPL:
-    .word 0x10008000      # Base address for display memory ($gp points here)
+.data
+    ADDR_DSPL:        .word 0x10008000      # Base address for display memory ($gp points here)
+    COLOR_RED:        .word 0xff0000
+    COLOR_ORANGE:     .word 0xff8800
+    COLOR_YELLOW:     .word 0xffff00
+    COLOR_GREEN:      .word 0x00ff00
+    COLOR_BLUE:       .word 0x0000ff
+    COLOR_PURPLE:     .word 0x8800ff
+    COLOR_BG:         .word 0x000000        # Black background
+    COLOR_BORDER:     .word 0x8B4513        # Brown border
+    COLOR_FIELD:      .word 0x808080        # Grey playing field
+    current_column:   .word 0, 0, 0         # Three gem colors for current column
+    column_x:         .word 5               # starting X position
+    column_y:         .word 0               # starting Y position
 
-##############################################################################
-# Game Data
-##############################################################################
-# Gem colors
-COLOR_RED:      .word 0xff0000
-COLOR_ORANGE:   .word 0xff8800  
-COLOR_YELLOW:   .word 0xffff00
-COLOR_GREEN:    .word 0x00ff00
-COLOR_BLUE:     .word 0x0000ff
-COLOR_PURPLE:   .word 0x8800ff
-
-# Game colors
-COLOR_BG:       .word 0x000000      # Black background
-COLOR_BORDER:   .word 0x8B4513      # Brown border
-COLOR_FIELD:    .word 0x808080      # Grey playing field
-
-# Game state
-current_column: .word 0, 0, 0       # Three gem colors for current column
-column_x:       .word 5             # starting X position
-column_y:       .word 0             # starting Y position
-
-    .text
-    .globl main
+.text
+.globl main
 
 ##############################################################################
 # Main Program
 ##############################################################################
 main:
-    # Initialize display
+    jal game_loop
+
+game_loop:
     jal draw_black_background
     jal draw_playing_field
     jal generate_new_column
     jal draw_current_column
-    
-    j main_loop # Start the game loop
-    
-main_loop:
-    li $v0, 11
-    li $a0, 35    # print '#'
-    syscall
-    j main_loop
+
+    j exit
 
 ##############################################################################
 # Handling different keyboard keys
@@ -64,14 +47,10 @@ main_loop:
 ##############################################################################
 # Draw black background for entire screen
 draw_black_background:
-    lw $t2, COLOR_BG
-    move $t0, $gp            # $gp points to display memory
-    li $t1, 0
-draw_bg_loop:
+    lw $t2, COLOR_BG        # Load background color
+    move $t0, $gp           # $gp points to display memory
     sw $t2, 0($t0)
-    addi $t0, $t0, 4
-    addi $t1, $t1, 1
-    blt $t1, 1024, draw_bg_loop
+    
     jr $ra
 
 # Draw playing field with brown border and grey interior
@@ -104,6 +83,7 @@ draw_field_rows:
     move $t0, $s1
     mul $s3, $s2, 128
     add $t0, $s1, $s3
+
     sw $t1, 0($t0)
     addi $t0, $t0, 4
 
@@ -162,120 +142,40 @@ generate_new_column:
 # Draw current column
 ##############################################################################
 draw_current_column:
+    addi $sp, $sp, -4   # Make space on stack
+    sw $ra, 0($sp)      # Save return address
+
     la $t0, current_column
-    li $v0, 11
-    li $a0, '1'
-    syscall
-
     lw $t1, column_x
-    li $v0, 11
-    li $a0, '2'
-    syscall
-
     lw $t2, column_y
-    li $v0, 11
-    li $a0, '3'
-    syscall
-
     lw $t3, ADDR_DSPL
-    li $v0, 11
-    li $a0, '4'
-    syscall
 
     li $t4, 5
-    li $v0, 11
-    li $a0, '5'
-    syscall
-
     li $t5, 10
-    li $v0, 11
-    li $a0, '6'
-    syscall
-
     li $t6, 128
-    li $v0, 11
-    li $a0, '7'
-    syscall
 
     add $t7, $t4, $t2
-    li $v0, 11
-    li $a0, '8'
-    syscall
-
     mul $t7, $t7, $t6
-    li $v0, 11
-    li $a0, '9'
-    syscall
-
     add $t8, $t5, $t1
-    li $v0, 11
-    li $a0, 'A'
-    syscall
-
     sll $t8, $t8, 2
-    li $v0, 11
-    li $a0, 'B'
-    syscall
-
     add $t3, $t3, $t7
-    li $v0, 11
-    li $a0, 'C'
-    syscall
-
     add $t3, $t3, $t8
-    li $v0, 11
-    li $a0, 'D'
-    syscall
 
     lw $a0, 0($t0)
-    li $v0, 11
-    li $a0, 'E'
-    syscall
-
     jal get_gem_color
-    li $v0, 11
-    li $a0, 'F'
-    syscall
-
     sw $v0, 0($t3)
-    li $v0, 11
-    li $a0, 'G'
-    syscall
 
     lw $a0, 4($t0)
-    li $v0, 11
-    li $a0, 'H'
-    syscall
-
     jal get_gem_color
-    li $v0, 11
-    li $a0, 'I'
-    syscall
-
     sw $v0, 128($t3)
-    li $v0, 11
-    li $a0, 'J'
-    syscall
 
     lw $a0, 8($t0)
-    li $v0, 11
-    li $a0, 'K'
-    syscall
-
     jal get_gem_color
-    li $v0, 11
-    li $a0, 'L'
-    syscall
-
     sw $v0, 256($t3)
-    li $v0, 11
-    li $a0, 'M'
-    syscall
 
+    lw $ra, 0($sp)      # Restore return address
+    addi $sp, $sp, 4    # Restore stack
     jr $ra
-    li $v0, 11
-    li $a0, 'N'
-    syscall
 
 ##############################################################################
 # Get gem color by index
@@ -287,6 +187,7 @@ get_gem_color:
     beq $a0, 3, color_green
     beq $a0, 4, color_blue
     beq $a0, 5, color_purple
+    jr $ra
 
 color_red:
     lw $v0, COLOR_RED
