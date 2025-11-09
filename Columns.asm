@@ -1,11 +1,19 @@
-##############################################################################
-# CSC258H1F Assembly Project: Columns with Keyboard Input Example
+################ CSC258H1F Assembly Project: Columns ##################
+# This file contains the implementation of Columns.
 #
-# Demonstrates keyboard input (detecting 'q') while preserving display memory ($gp)
+# Student 1: Ethan Brook, 1010976295
+# Student 2: [Name], [Student Number]
+######################## Bitmap Display Configuration ########################
+# - Unit width in pixels:       8
+# - Unit height in pixels:      8
+# - Display width in pixels:    256
+# - Display height in pixels:   256
+# - Base Address for Display:   0x10008000 ($gp)
 ##############################################################################
 
 .data
-    ADDR_DSPL:        .word 0x10008000      # Base address for display memory ($gp points here)
+    ADDR_DSPL:        .word 0x10008000      # Address for display memory (!!! $gp points here !!!)
+    ADDR_KBRD: 	      .word 0xffff0000      # Address for keyboard
     COLOR_RED:        .word 0xff0000
     COLOR_ORANGE:     .word 0xff8800
     COLOR_YELLOW:     .word 0xffff00
@@ -26,21 +34,97 @@
 # Main Program
 ##############################################################################
 main:
-    jal game_loop
-
+    jal generate_new_column    # Start the game
+    
 game_loop:
     jal draw_black_background
     jal draw_playing_field
-    jal generate_new_column
     jal draw_current_column
-
-    j exit
+    jal handle_keyboard_input
+    
+    # Add sleep to control game speed (approximately 60 FPS)
+    li $v0, 32
+    li $a0, 16                 # Sleep for ~16ms (60 FPS)
+    syscall
+    
+    j game_loop               # Loop forever
 
 ##############################################################################
-# Handling different keyboard keys
+# Handle keyboard input
 ##############################################################################
+handle_keyboard_input:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)              # Save return address
+    
+    lw $t0, ADDR_KBRD           # $t0 = base address for keyboard
+    lw $t1, 0($t0)              # Load first word from keyboard
+    beq $t1, 1, process_input   # If first word 1, key is pressed
+    j handle_keyboard_done      # No key pressed
+    
+process_input:
+    lw $t2, 4($t0)              # Load second word from keyboard (ASCII value)
+    
+    # Check for 'a' or 'A' key (move left)
+    beq $t2, 0x61, move_left    # 'a'
+    beq $t2, 0x41, move_left    # 'A'
+    
+    # Check for 'd' or 'D' key (move right)  
+    beq $t2, 0x64, move_right   # 'd'
+    beq $t2, 0x44, move_right   # 'D'
+    
+    # Check for 's' or 'S' key (drop down)
+    beq $t2, 0x73, drop_down    # 's'
+    beq $t2, 0x53, drop_down    # 'S'
+    
+    # Check for 'w' or 'W' key (shuffle column)
+    beq $t2, 0x77, shuffle_column  # 'w'
+    beq $t2, 0x57, shuffle_column  # 'W'
+    
+    # Check for 'q' or 'Q' key (quit game)
+    beq $t2, 0x71, exit    # 'q'
+    beq $t2, 0x51, exit    # 'Q'
+    
+    j handle_keyboard_done      # Unknown key, ignore
 
+move_left:
+    lw $t3, column_x
+    ble $t3, 0, handle_keyboard_done  # Don't move if at left edge (at x=0)
+    addi $t3, $t3, -1
+    sw $t3, column_x
+    j handle_keyboard_done
 
+move_right:
+    lw $t3, column_x
+    li $t4, 11                   # Right boundary (y=11)
+    bge $t3, $t4, handle_keyboard_done  # Don't move if at right edge
+    addi $t3, $t3, 1
+    sw $t3, column_x
+    j handle_keyboard_done
+
+drop_down:
+    lw $t3, column_y
+    li $t4, 21                  # Bottom boundary
+    bge $t3, $t4, handle_keyboard_done  # Don't move if at bottom
+    addi $t3, $t3, 1
+    sw $t3, column_y
+    j handle_keyboard_done
+
+shuffle_column:
+    la $t3, current_column
+    lw $t4, 0($t3)              # Load top gem color
+    lw $t5, 4($t3)              # Load middle gem color  
+    lw $t6, 8($t3)              # Load bottom gem color
+    
+    # Rotate colors downward (top -> middle, middle -> bottom, bottom -> top)
+    sw $t6, 0($t3)              # Bottom goes to top
+    sw $t4, 4($t3)              # Top goes to middle
+    sw $t5, 8($t3)              # Middle goes to bottom
+    j handle_keyboard_done
+
+handle_keyboard_done:
+    lw $ra, 0($sp)              # Restore return address
+    addi $sp, $sp, 4
+    jr $ra
 
 ##############################################################################
 # Display / Drawing
