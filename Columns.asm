@@ -111,8 +111,8 @@ grid_draw_loop_x:
     
     # Calculate display position
     lw $t0, ADDR_DSPL
-    li $t1, 5        # grid offset x
-    li $t2, 10       # grid offset y
+    li $t1, 10        # grid offset x
+    li $t2, 5       # grid offset y
     add $t3, $s0, $t1
     add $t4, $s1, $t2
     
@@ -158,7 +158,7 @@ check_collision_bottom:
     lw $t1, column_y
     
     # Check if at bottom of grid (bottom gem would be at y+2)
-    li $t2, 21                  # Max y for bottom gem
+    li $t2, 19                # Max y for bottom gem
     bge $t1, $t2, lock_column
     
     # Check if space below bottom gem is occupied
@@ -384,7 +384,7 @@ draw_playing_field:
     lw $t2, COLOR_FIELD
 
     li $t3, 9
-    li $t4, 4
+    li $t4, 2            # top border y-position
     li $t5, 14
     li $t6, 26
 
@@ -474,7 +474,7 @@ draw_current_column:
     lw $t2, column_y
     lw $t3, ADDR_DSPL
 
-    li $t4, 5
+    li $t4, 3
     li $t5, 10
     li $t6, 128
 
