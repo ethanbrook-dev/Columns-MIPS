@@ -290,11 +290,6 @@ move_left:
     lw $t3, column_x
     ble $t3, 0, handle_keyboard_done  # Don't move if at left edge
 
-# print 1
-    li $v0, 1        # syscall: print integer
-    li $a0, 1        # value = 1 = inside move left
-    syscall
-
     # Check if left movement would cause collision with existing gems
     # lw $t4, column_y
     # move $a0, $t3
@@ -318,11 +313,11 @@ move_right:
     bge $t3, $t4, handle_keyboard_done
     
     # Check if right movement would cause collision with existing gems
-    lw $t4, column_y
-    move $a0, $t3
-    move $a1, $t4
-    jal check_side_collision_right
-    bnez $v0, handle_keyboard_done  # Collision detected
+    # lw $t4, column_y
+    # move $a0, $t3
+    # move $a1, $t4
+    # jal check_side_collision_right
+    # bnez $v0, handle_keyboard_done  # Collision detected
     
     # No collision, update position
     addi $t3, $t3, 1
