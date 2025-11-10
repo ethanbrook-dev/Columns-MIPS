@@ -291,16 +291,11 @@ move_left:
     ble $t3, 0, handle_keyboard_done  # Don't move if at left edge
 
     # Check if left movement would cause collision with existing gems
-    # lw $t4, column_y
-    # move $a0, $t3
-    # move $a1, $t4
-    # jal check_side_collision_left
-    # bnez $v0, handle_keyboard_done  # Collision detected
-    
-    # print 2
-    li $v0, 1
-    li $a0, 2
-    syscall
+    lw $t4, column_y
+    move $a0, $t3
+    move $a1, $t4
+    jal check_side_collision_left
+    bnez $v0, handle_keyboard_done  # Collision detected
     
     # No collision, update position
     addi $t3, $t3, -1
@@ -313,11 +308,11 @@ move_right:
     bge $t3, $t4, handle_keyboard_done
     
     # Check if right movement would cause collision with existing gems
-    # lw $t4, column_y
-    # move $a0, $t3
-    # move $a1, $t4
-    # jal check_side_collision_right
-    # bnez $v0, handle_keyboard_done  # Collision detected
+    lw $t4, column_y
+    move $a0, $t3
+    move $a1, $t4
+    jal check_side_collision_right
+    bnez $v0, handle_keyboard_done  # Collision detected
     
     # No collision, update position
     addi $t3, $t3, 1
@@ -356,15 +351,98 @@ handle_keyboard_done:
 # $a0 = current X, $a1 = current Y (top gem)
 # Returns $v0 = 1 if any collision, 0 otherwise
 check_side_collision_left:
-    # Just return for now
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    move $s0, $a0  # current X
+    move $s1, $a1  # current Y
+    
+    # Check if moving left would go out of bounds
+    ble $s0, 0, collision_left_found
+    
+    # Check collision for all three gems in the column
+    # Top gem
+    addi $a0, $s0, -1  # position to the left
+    move $a1, $s1
+    jal get_grid_cell
+    bnez $v0, collision_left_found
+    
+    # Middle gem  
+    addi $a0, $s0, -1
+    addi $a1, $s1, 1
+    jal get_grid_cell
+    bnez $v0, collision_left_found
+    
+    # Bottom gem
+    addi $a0, $s0, -1
+    addi $a1, $s1, 2
+    jal get_grid_cell
+    bnez $v0, collision_left_found
+    
+    # No collision found
+    li $v0, 0
+    j check_left_done
+
+collision_left_found:
+    li $v0, 1
+
+check_left_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
     jr $ra
 
 # Check right movement collision  
 # $a0 = current x, $a1 = current y
 # Returns $v0 = 1 if collision
 check_side_collision_right:
-    # Just return for now
-    jr $ra     
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    move $s0, $a0  # current X
+    move $s1, $a1  # current Y
+    
+    # Check if moving right would go out of bounds
+    li $t0, 11     # Right boundary
+    bge $s0, $t0, collision_right_found
+    
+    # Check collision for all three gems in the column
+    # Top gem
+    addi $a0, $s0, 1  # position to the right
+    move $a1, $s1
+    jal get_grid_cell
+    bnez $v0, collision_right_found
+    
+    # Middle gem  
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    jal get_grid_cell
+    bnez $v0, collision_right_found
+    
+    # Bottom gem
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal get_grid_cell
+    bnez $v0, collision_right_found
+    
+    # No collision found
+    li $v0, 0
+    j check_right_done
+
+collision_right_found:
+    li $v0, 1
+
+check_right_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
+    jr $ra
 
 ##############################################################################
 # Display / Drawing
