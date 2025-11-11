@@ -2,7 +2,7 @@
 # This file contains the implementation of Columns.
 #
 # Student 1: Ethan Brook, 1010976295
-# Student 2: [Name], [Student Number]
+# Student 2: Juhwan Son, 1007334724
 ######################## Bitmap Display Configuration ########################
 # - Unit width in pixels:       8
 # - Unit height in pixels:      8
@@ -111,8 +111,8 @@ grid_draw_loop_x:
     
     # Calculate display position
     lw $t0, ADDR_DSPL
-    li $t1, 10        # grid offset x
-    li $t2, 5       # grid offset y
+    li $t1, 5        # grid offset x
+    li $t2, 10       # grid offset y
     add $t3, $s0, $t1
     add $t4, $s1, $t2
     
@@ -158,7 +158,7 @@ check_collision_bottom:
     lw $t1, column_y
     
     # Check if at bottom of grid (bottom gem would be at y+2)
-    li $t2, 19                # Max y for bottom gem
+    li $t2, 21                  # Max y for bottom gem
     bge $t1, $t2, lock_column
     
     # Check if space below bottom gem is occupied
@@ -291,11 +291,16 @@ move_left:
     ble $t3, 0, handle_keyboard_done  # Don't move if at left edge
 
     # Check if left movement would cause collision with existing gems
-    lw $t4, column_y
-    move $a0, $t3
-    move $a1, $t4
-    jal check_side_collision_left
-    bnez $v0, handle_keyboard_done  # Collision detected
+    # lw $t4, column_y
+    # move $a0, $t3
+    # move $a1, $t4
+    # jal check_side_collision_left
+    # bnez $v0, handle_keyboard_done  # Collision detected
+    
+    # print 2
+    li $v0, 1
+    li $a0, 2
+    syscall
     
     # No collision, update position
     addi $t3, $t3, -1
@@ -308,11 +313,11 @@ move_right:
     bge $t3, $t4, handle_keyboard_done
     
     # Check if right movement would cause collision with existing gems
-    lw $t4, column_y
-    move $a0, $t3
-    move $a1, $t4
-    jal check_side_collision_right
-    bnez $v0, handle_keyboard_done  # Collision detected
+    # lw $t4, column_y
+    # move $a0, $t3
+    # move $a1, $t4
+    # jal check_side_collision_right
+    # bnez $v0, handle_keyboard_done  # Collision detected
     
     # No collision, update position
     addi $t3, $t3, 1
@@ -351,98 +356,15 @@ handle_keyboard_done:
 # $a0 = current X, $a1 = current Y (top gem)
 # Returns $v0 = 1 if any collision, 0 otherwise
 check_side_collision_left:
-    addi $sp, $sp, -12
-    sw $ra, 0($sp)
-    sw $s0, 4($sp)
-    sw $s1, 8($sp)
-    
-    move $s0, $a0  # current X
-    move $s1, $a1  # current Y
-    
-    # Check if moving left would go out of bounds
-    ble $s0, 0, collision_left_found
-    
-    # Check collision for all three gems in the column
-    # Top gem
-    addi $a0, $s0, -1  # position to the left
-    move $a1, $s1
-    jal get_grid_cell
-    bnez $v0, collision_left_found
-    
-    # Middle gem  
-    addi $a0, $s0, -1
-    addi $a1, $s1, 1
-    jal get_grid_cell
-    bnez $v0, collision_left_found
-    
-    # Bottom gem
-    addi $a0, $s0, -1
-    addi $a1, $s1, 2
-    jal get_grid_cell
-    bnez $v0, collision_left_found
-    
-    # No collision found
-    li $v0, 0
-    j check_left_done
-
-collision_left_found:
-    li $v0, 1
-
-check_left_done:
-    lw $ra, 0($sp)
-    lw $s0, 4($sp)
-    lw $s1, 8($sp)
-    addi $sp, $sp, 12
+    # Just return for now
     jr $ra
 
 # Check right movement collision  
 # $a0 = current x, $a1 = current y
 # Returns $v0 = 1 if collision
 check_side_collision_right:
-    addi $sp, $sp, -12
-    sw $ra, 0($sp)
-    sw $s0, 4($sp)
-    sw $s1, 8($sp)
-    
-    move $s0, $a0  # current X
-    move $s1, $a1  # current Y
-    
-    # Check if moving right would go out of bounds
-    li $t0, 11     # Right boundary
-    bge $s0, $t0, collision_right_found
-    
-    # Check collision for all three gems in the column
-    # Top gem
-    addi $a0, $s0, 1  # position to the right
-    move $a1, $s1
-    jal get_grid_cell
-    bnez $v0, collision_right_found
-    
-    # Middle gem  
-    addi $a0, $s0, 1
-    addi $a1, $s1, 1
-    jal get_grid_cell
-    bnez $v0, collision_right_found
-    
-    # Bottom gem
-    addi $a0, $s0, 1
-    addi $a1, $s1, 2
-    jal get_grid_cell
-    bnez $v0, collision_right_found
-    
-    # No collision found
-    li $v0, 0
-    j check_right_done
-
-collision_right_found:
-    li $v0, 1
-
-check_right_done:
-    lw $ra, 0($sp)
-    lw $s0, 4($sp)
-    lw $s1, 8($sp)
-    addi $sp, $sp, 12
-    jr $ra
+    # Just return for now
+    jr $ra     
 
 ##############################################################################
 # Display / Drawing
@@ -462,7 +384,7 @@ draw_playing_field:
     lw $t2, COLOR_FIELD
 
     li $t3, 9
-    li $t4, 2            # top border y-position
+    li $t4, 4
     li $t5, 14
     li $t6, 26
 
@@ -552,7 +474,7 @@ draw_current_column:
     lw $t2, column_y
     lw $t3, ADDR_DSPL
 
-    li $t4, 3
+    li $t4, 5
     li $t5, 10
     li $t6, 128
 
