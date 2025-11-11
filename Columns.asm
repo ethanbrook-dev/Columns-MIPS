@@ -63,26 +63,24 @@ game_loop:
 # Grid Management
 ##############################################################################
 # $a0 = x, $a1 = y, returns $v0 = cell value (0 = empty, 1-6 = gem colors)
-# $a0 = x (0..11), $a1 = y (0..21)
-# returns $v0 = cell value
 get_grid_cell:
-    la   $t0, game_grid      # base address
-    li   $t1, 12             # width of grid
-    mul  $t2, $a1, $t1       # row offset in cells
-    add  $t2, $t2, $a0       # add column
-    add  $t0, $t0, $t2       # add cell offset in bytes
-    lb   $v0, 0($t0)         # load byte
-    jr   $ra
+    la $t0, game_grid
+    li $t1, 12                   # grid width
+    mul $t2, $a1, $t1           # y * width
+    add $t2, $t2, $a0           # + x
+    add $t0, $t0, $t2           # base + offset
+    lb $v0, 0($t0)              # load byte value
+    jr $ra
 
-# $a0 = x, $a1 = y, $a2 = value to store
+# $a0 = x, $a1 = y, $a2 = value
 set_grid_cell:
-    la   $t0, game_grid
-    li   $t1, 12
-    mul  $t2, $a1, $t1
-    add  $t2, $t2, $a0
-    add  $t0, $t0, $t2
-    sb   $a2, 0($t0)
-    jr   $ra
+    la $t0, game_grid
+    li $t1, 12                   # grid width
+    mul $t2, $a1, $t1           # y * width
+    add $t2, $t2, $a0           # + x
+    add $t0, $t0, $t2           # base + offset
+    sb $a2, 0($t0)              # store byte value
+    jr $ra
 
 ##############################################################################
 # Draw Grid Gems
@@ -172,56 +170,47 @@ check_collision_bottom:
     j check_collision_done
 
 lock_column:
-    # Store current column gems into grid safely
+    # Store current column gems into grid
     la $t3, current_column
-    lw $t4, column_x          # x position
-    lw $t5, column_y          # y position (top gem)
-
-    # --- Top gem ---
+    lw $t4, column_x
+    lw $t5, column_y
+    
+    # Store top gem
     move $a0, $t4
     move $a1, $t5
-    li $t7, 22
-    bge $a1, $t7, skip_top   # skip if y >= max
     lw $a2, 0($t3)
-    addi $a2, $a2, 1
+    addi $a2, $a2, 1           # Convert from 0-5 to 1-6 (0 = empty)
     jal set_grid_cell
-skip_top:
-
-    # --- Middle gem ---
+    
+    # Store middle gem
     move $a0, $t4
     addi $a1, $t5, 1
-    bge $a1, $t7, skip_middle
     lw $a2, 4($t3)
     addi $a2, $a2, 1
     jal set_grid_cell
-skip_middle:
-
-    # --- Bottom gem ---
+    
+    # Store bottom gem
     move $a0, $t4
     addi $a1, $t5, 2
-    bge $a1, $t7, skip_bottom
     lw $a2, 8($t3)
     addi $a2, $a2, 1
     jal set_grid_cell
-skip_bottom:
-
+    
     # Check for matches
     jal check_matches
-
-    # Reset column for next spawn
+    
+    # Generate new column at top
     li $t6, 0
     sw $t6, column_y
     li $t6, 5
     sw $t6, column_x
     jal generate_new_column
-
-    # Check spawn collision (game over)
+    
+    # Check if new column can be placed (game over condition)
     lw $t0, column_x
     li $t1, 0
     jal check_spawn_collision
     bnez $v0, set_game_over
-
-    jr $ra
 
 check_collision_done:
     lw $ra, 0($sp)
@@ -362,34 +351,38 @@ handle_keyboard_done:
 # $a0 = current X, $a1 = current Y (top gem)
 # Returns $v0 = 1 if any collision, 0 otherwise
 check_side_collision_left:
-    addi $sp, $sp, -4
+    addi $sp, $sp, -12
     sw $ra, 0($sp)
-
-    move $t0, $a0    # current X
-    move $t1, $a1    # current Y
-
-    # Check left boundary
-    ble $t0, 0, collision_left_found
-
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    move $s0, $a0  # current X
+    move $s1, $a1  # current Y
+    
+    # Check if moving left would go out of bounds
+    ble $s0, 0, collision_left_found
+    
+    # Check collision for all three gems in the column
     # Top gem
-    addi $a0, $t0, -1
-    move $a1, $t1
+    addi $a0, $s0, -1  # position to the left
+    move $a1, $s1
     jal get_grid_cell
     bnez $v0, collision_left_found
-
-    # Middle gem
-    addi $a0, $t0, -1
-    addi $a1, $t1, 1
+    
+    # Middle gem  
+    addi $a0, $s0, -1
+    addi $a1, $s1, 1
     jal get_grid_cell
     bnez $v0, collision_left_found
-
+    
     # Bottom gem
-    addi $a0, $t0, -1
-    addi $a1, $t1, 2
+    addi $a0, $s0, -1
+    addi $a1, $s1, 2
     jal get_grid_cell
     bnez $v0, collision_left_found
-
-    li $v0, 0           # no collision
+    
+    # No collision found
+    li $v0, 0
     j check_left_done
 
 collision_left_found:
@@ -397,39 +390,47 @@ collision_left_found:
 
 check_left_done:
     lw $ra, 0($sp)
-    addi $sp, $sp, 4
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
     jr $ra
 
-
+# Check right movement collision  
+# $a0 = current x, $a1 = current y
+# Returns $v0 = 1 if collision
 check_side_collision_right:
-    addi $sp, $sp, -4
+    addi $sp, $sp, -12
     sw $ra, 0($sp)
-
-    move $t0, $a0    # current X
-    move $t1, $a1    # current Y
-
-    # Right boundary
-    li $t2, 11
-    bge $t0, $t2, collision_right_found
-
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    move $s0, $a0  # current X
+    move $s1, $a1  # current Y
+    
+    # Check if moving right would go out of bounds
+    li $t0, 11     # Right boundary
+    bge $s0, $t0, collision_right_found
+    
+    # Check collision for all three gems in the column
     # Top gem
-    addi $a0, $t0, 1
-    move $a1, $t1
+    addi $a0, $s0, 1  # position to the right
+    move $a1, $s1
     jal get_grid_cell
     bnez $v0, collision_right_found
-
-    # Middle gem
-    addi $a0, $t0, 1
-    addi $a1, $t1, 1
+    
+    # Middle gem  
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
     jal get_grid_cell
     bnez $v0, collision_right_found
-
+    
     # Bottom gem
-    addi $a0, $t0, 1
-    addi $a1, $t1, 2
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
     jal get_grid_cell
     bnez $v0, collision_right_found
-
+    
+    # No collision found
     li $v0, 0
     j check_right_done
 
@@ -438,7 +439,9 @@ collision_right_found:
 
 check_right_done:
     lw $ra, 0($sp)
-    addi $sp, $sp, 4
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
     jr $ra
 
 ##############################################################################
