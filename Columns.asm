@@ -2,7 +2,7 @@
 # This file contains the implementation of Columns.
 #
 # Student 1: Ethan Brook, 1010976295
-# Student 2: Juhwan Son, 1007334724
+# Student 2: [Name], [Student Number]
 ######################## Bitmap Display Configuration ########################
 # - Unit width in pixels:       8
 # - Unit height in pixels:      8
@@ -26,9 +26,6 @@
     current_column:   .word 0, 0, 0         # Three gem colors for current column
     column_x:         .word 5               # starting X position
     column_y:         .word 0               # starting Y position
-    game_grid:        .byte 0:264           # All game board's cells intialized to 0
-    game_over:        .word 0
-    score:            .word 0
 
 .text
 .globl main
@@ -40,215 +37,18 @@ main:
     jal generate_new_column    # Start the game
     
 game_loop:
-    # Check if game over
-    lw $t0, game_over
-    bnez $t0, game_over_screen
-    
-    jal check_collision_bottom    # Check if current column should lock
-    jal handle_keyboard_input
     jal draw_black_background
     jal draw_playing_field
-    jal draw_grid_gems           # Draw all locked gems
-    jal draw_current_column      # Draw current column
     jal draw_current_column
+    jal handle_keyboard_input
     
-    # Sleep for game speed
+    # Add sleep to control game speed (approximately 60 FPS)
     li $v0, 32
-    li $a0, 16                   # Sleep for ~16ms (60 FPS)
+    li $a0, 16                 # Sleep for ~16ms (60 FPS)
     syscall
     
     j game_loop               # Loop forever
 
-##############################################################################
-# Grid Management
-##############################################################################
-# $a0 = x, $a1 = y, returns $v0 = cell value (0 = empty, 1-6 = gem colors)
-get_grid_cell:
-    la $t0, game_grid
-    li $t1, 12                   # grid width
-    mul $t2, $a1, $t1           # y * width
-    add $t2, $t2, $a0           # + x
-    add $t0, $t0, $t2           # base + offset
-    lb $v0, 0($t0)              # load byte value
-    jr $ra
-
-# $a0 = x, $a1 = y, $a2 = value
-set_grid_cell:
-    la $t0, game_grid
-    li $t1, 12                   # grid width
-    mul $t2, $a1, $t1           # y * width
-    add $t2, $t2, $a0           # + x
-    add $t0, $t0, $t2           # base + offset
-    sb $a2, 0($t0)              # store byte value
-    jr $ra
-
-##############################################################################
-# Draw Grid Gems
-##############################################################################
-draw_grid_gems:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-    
-    li $s0, 0        # x counter
-    li $s1, 0        # y counter
-    
-grid_draw_loop_y:
-    li $s0, 0        # reset x counter
-    
-grid_draw_loop_x:
-    # Get grid cell value
-    move $a0, $s0
-    move $a1, $s1
-    jal get_grid_cell
-    
-    # If cell is not empty, draw gem
-    beqz $v0, skip_draw_gem
-    
-    # Calculate screen position (convert from 1-6 back to 0-5 for color indexing)
-    addi $a0, $v0, -1
-    jal get_gem_color
-    move $t9, $v0    # Save color
-    
-    # Calculate display position
-    lw $t0, ADDR_DSPL
-    li $t1, 5        # grid offset x
-    li $t2, 10       # grid offset y
-    add $t3, $s0, $t1
-    add $t4, $s1, $t2
-    
-    # Calculate memory address
-    li $t5, 128      # display width in bytes
-    mul $t6, $t4, $t5
-    sll $t7, $t3, 2
-    add $t0, $t0, $t6
-    add $t0, $t0, $t7
-    
-    # Draw the gem
-    sw $t9, 0($t0)
-
-skip_draw_gem:
-    addi $s0, $s0, 1
-    li $t0, 12
-    blt $s0, $t0, grid_draw_loop_x
-    
-    addi $s1, $s1, 1
-    li $t0, 22
-    blt $s1, $t0, grid_draw_loop_y
-    
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
-
-##############################################################################
-# Match Detection (Placeholder for Milestone 3)
-##############################################################################
-check_matches:
-    # TODO: Implement horizontal, vertical, and diagonal matching
-    # For now, we just return
-    jr $ra
-
-##############################################################################
-# Collision Detection
-##############################################################################
-check_collision_bottom:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-    
-    lw $t0, column_x
-    lw $t1, column_y
-    
-    # Check if at bottom of grid (bottom gem would be at y+2)
-    li $t2, 21                  # Max y for bottom gem
-    bge $t1, $t2, lock_column
-    
-    # Check if space below bottom gem is occupied
-    move $a0, $t0
-    addi $a1, $t1, 3           # Check position below bottom gem
-    jal get_grid_cell
-    bnez $v0, lock_column      # If occupied, lock column
-    
-    j check_collision_done
-
-lock_column:
-    # Store current column gems into grid
-    la $t3, current_column
-    lw $t4, column_x
-    lw $t5, column_y
-    
-    # Store top gem
-    move $a0, $t4
-    move $a1, $t5
-    lw $a2, 0($t3)
-    addi $a2, $a2, 1           # Convert from 0-5 to 1-6 (0 = empty)
-    jal set_grid_cell
-    
-    # Store middle gem
-    move $a0, $t4
-    addi $a1, $t5, 1
-    lw $a2, 4($t3)
-    addi $a2, $a2, 1
-    jal set_grid_cell
-    
-    # Store bottom gem
-    move $a0, $t4
-    addi $a1, $t5, 2
-    lw $a2, 8($t3)
-    addi $a2, $a2, 1
-    jal set_grid_cell
-    
-    # Check for matches
-    jal check_matches
-    
-    # Generate new column at top
-    li $t6, 0
-    sw $t6, column_y
-    li $t6, 5
-    sw $t6, column_x
-    jal generate_new_column
-    
-    # Check if new column can be placed (game over condition)
-    lw $t0, column_x
-    li $t1, 0
-    jal check_spawn_collision
-    bnez $v0, set_game_over
-
-check_collision_done:
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
-
-set_game_over:
-    li $t0, 1
-    sw $t0, game_over
-    j check_collision_done
-
-# Check if new column collides at spawn position
-# $a0 = x, $a1 = y, returns $v0 = 1 if collision, 0 otherwise
-check_spawn_collision:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-    
-    move $s0, $a0
-    move $s1, $a1
-    
-    # Check top gem position
-    move $a0, $s0
-    move $a1, $s1
-    jal get_grid_cell
-    move $s2, $v0
-    
-    # Check middle gem position
-    move $a0, $s0
-    addi $a1, $s1, 1
-    jal get_grid_cell
-    or $s2, $s2, $v0
-    
-    # If any spawn position is occupied, collision occurred
-    sne $v0, $s2, $zero
-    
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
 ##############################################################################
 # Handle keyboard input
 ##############################################################################
@@ -288,38 +88,15 @@ process_input:
 
 move_left:
     lw $t3, column_x
-    ble $t3, 0, handle_keyboard_done  # Don't move if at left edge
-
-    # Check if left movement would cause collision with existing gems
-    # lw $t4, column_y
-    # move $a0, $t3
-    # move $a1, $t4
-    # jal check_side_collision_left
-    # bnez $v0, handle_keyboard_done  # Collision detected
-    
-    # print 2
-    li $v0, 1
-    li $a0, 2
-    syscall
-    
-    # No collision, update position
+    ble $t3, 0, handle_keyboard_done  # Don't move if at left edge (at x=0)
     addi $t3, $t3, -1
     sw $t3, column_x
     j handle_keyboard_done
 
 move_right:
     lw $t3, column_x
-    li $t4, 11                   # Right boundary
-    bge $t3, $t4, handle_keyboard_done
-    
-    # Check if right movement would cause collision with existing gems
-    # lw $t4, column_y
-    # move $a0, $t3
-    # move $a1, $t4
-    # jal check_side_collision_right
-    # bnez $v0, handle_keyboard_done  # Collision detected
-    
-    # No collision, update position
+    li $t4, 11                   # Right boundary (y=11)
+    bge $t3, $t4, handle_keyboard_done  # Don't move if at right edge
     addi $t3, $t3, 1
     sw $t3, column_x
     j handle_keyboard_done
@@ -348,23 +125,6 @@ handle_keyboard_done:
     lw $ra, 0($sp)              # Restore return address
     addi $sp, $sp, 4
     jr $ra
-
-##############################################################################
-# Side Collision Helper Functions
-##############################################################################
-# Check left movement collision 
-# $a0 = current X, $a1 = current Y (top gem)
-# Returns $v0 = 1 if any collision, 0 otherwise
-check_side_collision_left:
-    # Just return for now
-    jr $ra
-
-# Check right movement collision  
-# $a0 = current x, $a1 = current y
-# Returns $v0 = 1 if collision
-check_side_collision_right:
-    # Just return for now
-    jr $ra     
 
 ##############################################################################
 # Display / Drawing
@@ -533,14 +293,8 @@ color_purple:
     jr $ra
 
 ##############################################################################
-# Game Over and Exit
+# Exit
 ##############################################################################
-game_over_screen:
-    # TODO: Handle game over state - don't just exit.
-    # For now, we exit for simplicity but later change this
-    # TODO
-    j exit
-    
 exit:
     li $v0, 10
     syscall
