@@ -7,6 +7,7 @@
 .data
 # Memory
 ADDR_DSPL: .word 0x10008000
+ADDR_KBRD: .word 0xffff0000
 
 # Colors
 colors:
@@ -32,8 +33,8 @@ main:
     # Initialize static game scene (if we make any)
     jal generate_random_colors
 game_loop:
-    jal draw_screen
     jal handle_keyboard_controls
+    jal draw_screen
     
     # --- delay for 60 FPS ---
     li $v0, 32        # syscall 32 = sleep
@@ -44,8 +45,79 @@ game_loop:
     j game_loop
 
 handle_keyboard_controls:
-    # Just return for now
+    lw $t0, ADDR_KBRD               # Setting $t0 = base address for keyboard
+    lw $t8, 0($t0)                  # We load first word from keyboard
+    beq $t8, 1, handle_keyboard_input      # If first word is 1, then that means a key is pressed and so we proceed to the handle_keyboard_input function
+    jr $ra                          # No key pressed => return
+
+handle_keyboard_input:              # If the program gets to this function, then a key is pressed
+    lw $a0, 4($t0)                  # We load the second word from keyboard into register $a0 (arg register as we want to use this arg in the inner function calls)
+
+    # If 'a' or 'A', we want the column to move left
+    beq $a0, 0x61, move_left        # 0x61 is the keycode for 'a'
+    beq $a0, 0x41, move_left        # 0x41 is the keycode for 'A'
+    
+    # If 'd' or 'D', we want the column to move right  
+    beq $a0, 0x64, move_right       # 0x64 is the keycode for 'd'
+    beq $a0, 0x44, move_right       # 0x44 is the keycode for 'D'
+    
+    # If 'w' or 'W', we want to shuffle the column
+    beq $a0, 0x77, shuffle_column   # 0x77 is the keycode for 'w'
+    beq $a0, 0x57, shuffle_column   # 0x57 is the keycode for 'W'
+    
+    # If 's' or 'S', we want the column to move down
+    beq $a0, 0x73, move_down        # 0x73 is the keycode for 's'
+    beq $a0, 0x53, move_down        # 0x53 is the keycode for 'S'
+    
+    # If 'q' or 'Q', we want to quit the game
+    beq $a0, 0x71, quit_game        # 0x71 is the keycode for 'q'
+    beq $a0, 0x51, quit_game        # 0x51 is the keycode for 'Q'
+    
+    jr $ra                          # Unknown key, return
+
+move_left:
+    lw $t0, current_x
+    ble $t0, 1, move_left_done      # Don't move left if at left edge (x=1)
+    addi $t0, $t0, -1
+    sw $t0, current_x
+move_left_done:
     jr $ra
+
+move_right:
+    lw $t0, current_x
+    li $t1, 11
+    bge $t0, $t1, move_right_done   # Don't move right if at right edge (x=11)
+    addi $t0, $t0, 1
+    sw $t0, current_x
+move_right_done:
+    jr $ra
+
+move_down:
+    lw $t0, current_y
+    li $t1, 29
+    bge $t0, $t1, move_down_done    # Don't move down if at bottom (y=29)
+    addi $t0, $t0, 1
+    sw $t0, current_y
+move_down_done:
+    jr $ra
+
+shuffle_column:
+    # Rotate colors: bottom -> top, top -> middle, middle -> bottom
+    la $t0, column_colors
+    lw $t1, 0($t0)           # Set $t1 = top color
+    lw $t2, 4($t0)           # Set $t2 = middle color  
+    lw $t3, 8($t0)           # Set $t3 = bottom color
+    
+    # Shuffle order: bottom becomes top, top becomes middle, middle becomes bottom
+    sw $t3, 0($t0)           # Store $t3 INTO first spot of column_colors array => new top = old bottom
+    sw $t1, 4($t0)           # Store $t1 INTO second spot of column_colors array => new middle = old top  
+    sw $t2, 8($t0)           # Store $t2 INTO third spot of column_colors array => new bottom = old middle
+
+    jr $ra
+
+quit_game:
+    li $v0, 10
+    syscall
 
 # ==================== CORE FUNCTIONS ====================
 
