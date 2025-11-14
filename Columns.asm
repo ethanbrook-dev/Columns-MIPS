@@ -94,7 +94,7 @@ move_right_done:
 
 move_down:
     lw $t0, current_y
-    li $t1, 29
+    li $t1, 28
     bge $t0, $t1, move_down_done    # Don't move down if at bottom (y=29)
     addi $t0, $t0, 1
     sw $t0, current_y
