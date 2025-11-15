@@ -78,20 +78,35 @@ handle_keyboard_input:              # If the program gets to this function, then
     jr $ra                          # Unknown key, return
 
 move_left:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal check_collision_left
+    bnez $v0, move_left_done        # Don't move if collision
+    
     lw $t0, current_x
-    ble $t0, 1, move_left_done      # Don't move left if at left edge (x=1)
     addi $t0, $t0, -1
     sw $t0, current_x
+    
 move_left_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 move_right:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal check_collision_right
+    bnez $v0, move_right_done       # Don't move if collision
+    
     lw $t0, current_x
-    li $t1, 11
-    bge $t0, $t1, move_right_done   # Don't move right if at right edge (x=11)
     addi $t0, $t0, 1
     sw $t0, current_x
+    
 move_right_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 move_down:
@@ -337,7 +352,7 @@ frozen_skip:
     addi $sp, $sp, 4
     jr $ra
 
-# ==================== COLLISION DETECTION ====================
+# ==================== BOTTOM  COLLISION DETECTION ====================
 check_collisions:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
@@ -386,7 +401,129 @@ collision_return:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
+
+# ==================== SIDE COLLISION DETECTION ====================
+
+check_collision_left:
+    # Check if moving left would cause collision
+    # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check left wall
+    ble $a0, 1, collision_left_detected  # At left edge (x=1 is left border)
+    
+    # Check ALL THREE gems to the left
+    # Check top gem left (x-1, y)
+    addi $a0, $a0, -1
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    # Check middle gem left (x-1, y+1)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, -1
+    addi $a1, $a1, 1
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    # Check bottom gem left (x-1, y+2)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, -1
+    addi $a1, $a1, 2
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    li $v0, 0                       # No collision
+    j collision_left_return
+    
+collision_left_detected:
+    li $v0, 1                       # Collision detected
+    
+collision_left_return:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+check_collision_right:
+    # Check if moving right would cause collision
+    # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check right wall
+    li $t0, 11
+    bge $a0, $t0, collision_right_detected  # At right edge (x=11 is right border)
+    
+    # Check ALL THREE gems to the right
+    # Check top gem right (x+1, y)
+    addi $a0, $a0, 1
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    # Check middle gem right (x+1, y+1)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, 1
+    addi $a1, $a1, 1
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    # Check bottom gem right (x+1, y+2)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, 1
+    addi $a1, $a1, 2
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    li $v0, 0                       # No collision
+    j collision_right_return
+    
+collision_right_detected:
+    li $v0, 1                       # Collision detected
+    
+collision_right_return:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
    
+# ==================== UTILITY FUNCTIONS ====================
+draw_unit:
+    # a0 = x (0-31), a1 = y (0-31), a2 = color index (0-8)
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # Calculate memory address: address = base + (y * 32 + x) * 4
+    la $t0, ADDR_DSPL
+    lw $t0, 0($t0)           # Load actual display address
+    
+    li $t1, 32               # Grid width
+    mul $t2, $a1, $t1        # y * 32
+    add $t2, $t2, $a0        # + x
+    sll $t2, $t2, 2          # * 4 bytes
+    add $t2, $t0, $t2        # Final address
+    
+    # Get actual color value from colors array
+    la $t3, colors           # Base of colors array
+    sll $t4, $a2, 2          # color index * 4
+    add $t3, $t3, $t4        # Address of specific color
+    lw $t4, 0($t3)           # Load actual color value
+    
+    # Store to display memory
+    sw $t4, 0($t2)
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
 land_column:
     # Store current column in playing_field as frozen gems
     addi $sp, $sp, -4
@@ -420,37 +557,7 @@ land_column:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra    
-
-# ==================== UTILITY FUNCTIONS ====================
-
-draw_unit:
-    # a0 = x (0-31), a1 = y (0-31), a2 = color index (0-8)
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
     
-    # Calculate memory address: address = base + (y * 32 + x) * 4
-    la $t0, ADDR_DSPL
-    lw $t0, 0($t0)           # Load actual display address
-    
-    li $t1, 32               # Grid width
-    mul $t2, $a1, $t1        # y * 32
-    add $t2, $t2, $a0        # + x
-    sll $t2, $t2, 2          # * 4 bytes
-    add $t2, $t0, $t2        # Final address
-    
-    # Get actual color value from colors array
-    la $t3, colors           # Base of colors array
-    sll $t4, $a2, 2          # color index * 4
-    add $t3, $t3, $t4        # Address of specific color
-    lw $t4, 0($t3)           # Load actual color value
-    
-    # Store to display memory
-    sw $t4, 0($t2)
-    
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
-
 # ==================== DISPLAY LAYOUT ====================
 # Playing Field: x=0-12, y=0-31 (13 columns x 32 rows)
 # Score Area: x=13-31, y=0-31 (19 columns x 32 rows)
