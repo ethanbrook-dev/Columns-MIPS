@@ -8,6 +8,7 @@
 # Memory
 ADDR_DSPL: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
+playing_field: .word 0:416    # 13×32 = 416 positions, all initialized to 0
 
 # Colors
 colors:
@@ -34,6 +35,7 @@ main:
     jal generate_random_colors
 game_loop:
     jal handle_keyboard_controls
+    jal check_collisions
     jal draw_screen
     
     # --- delay for 60 FPS ---
@@ -76,29 +78,58 @@ handle_keyboard_input:              # If the program gets to this function, then
     jr $ra                          # Unknown key, return
 
 move_left:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal check_collision_left
+    bnez $v0, move_left_done        # Don't move if collision
+    
     lw $t0, current_x
-    ble $t0, 1, move_left_done      # Don't move left if at left edge (x=1)
     addi $t0, $t0, -1
     sw $t0, current_x
+    
 move_left_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 move_right:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal check_collision_right
+    bnez $v0, move_right_done       # Don't move if collision
+    
     lw $t0, current_x
-    li $t1, 11
-    bge $t0, $t1, move_right_done   # Don't move right if at right edge (x=11)
     addi $t0, $t0, 1
     sw $t0, current_x
+    
 move_right_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 move_down:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # Check if we're at the bottom
     lw $t0, current_y
     li $t1, 28
-    bge $t0, $t1, move_down_done    # Don't move down if at bottom (y=29)
+    bge $t0, $t1, move_down_done    # Don't move down if at bottom
+    
+    # Check for collision below
+    jal check_collision_below
+    bnez $v0, move_down_done        # Don't move down if collision
+    
+    # No collision, move down
+    lw $t0, current_y
     addi $t0, $t0, 1
     sw $t0, current_y
+
 move_down_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 shuffle_column:
@@ -120,7 +151,6 @@ quit_game:
     syscall
 
 # ==================== CORE FUNCTIONS ====================
-
 draw_screen:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
@@ -128,6 +158,7 @@ draw_screen:
     jal clear_screen
     jal draw_playing_field_border
     jal draw_score_area
+    jal draw_frozen_gems
     jal draw_current_column
     
     lw $ra, 0($sp)
@@ -246,7 +277,9 @@ draw_current_column:
     # Load column position
     lw $a0, current_x        # Grid X (0-12)
     lw $a1, current_y        # Grid Y (0-31)
-    la $s0, column_colors    # Color arraya
+    la $s0, column_colors    # Color array
+    
+    # Also in here after check if you made a new column but it automatically collides (occupied) because if so we gotta take the user to the game over screen or smth
 
     # Draw top gem
     lw $a2, 0($s0)           # Color index
@@ -266,8 +299,205 @@ draw_current_column:
     addi $sp, $sp, 4
     jr $ra
 
-# ==================== UTILITY FUNCTIONS ====================
+# ==================== FROZEN GEM FUNCTIONS ====================
 
+store_gem:
+    # a0 = x (0-12), a1 = y (0-31), a2 = color index (1-6)
+    la $t0, playing_field        # Base address of playing field
+    li $t1, 13                   # Grid width (13 columns)
+    mul $t2, $a1, $t1           # y * 13
+    add $t2, $t2, $a0           # + x
+    sll $t2, $t2, 2             # * 4 bytes
+    add $t2, $t0, $t2           # Final address in playing_field
+    
+    sw $a2, 0($t2)              # Store color index at calculated address
+    jr $ra
+
+load_gem:
+    # a0 = x (0-12), a1 = y (0-31)
+    # returns: v0 = color index (0 if empty)
+    la $t0, playing_field        # Base address of playing field
+    li $t1, 13                   # Grid width (13 columns)
+    mul $t2, $a1, $t1           # y * 13
+    add $t2, $t2, $a0           # + x
+    sll $t2, $t2, 2             # * 4 bytes
+    add $t2, $t0, $t2           # Final address in playing_field
+    
+    lw $v0, 0($t2)              # Load color index from address
+    jr $ra
+
+draw_frozen_gems:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    li $a1, 0                   # Start from y=0
+frozen_y_loop:
+    li $a0, 0                   # Start from x=0  
+frozen_x_loop:
+    jal load_gem                # Check if cell has gem
+    beqz $v0, frozen_skip       # Skip if empty (0)
+    
+    # Draw the frozen gem
+    move $a2, $v0               # Color index
+    jal draw_unit
+    
+frozen_skip:
+    addi $a0, $a0, 1
+    li $t0, 13
+    blt $a0, $t0, frozen_x_loop # Loop through x=0-12
+    
+    addi $a1, $a1, 1
+    li $t0, 32
+    blt $a1, $t0, frozen_y_loop # Loop through y=0-31
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# ==================== BOTTOM  COLLISION DETECTION ====================
+check_collisions:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # Check if we're at the bottom of the screen
+    lw $t0, current_y
+    li $t1, 28
+    bge $t0, $t1, land_col    # If at bottom, land automatically
+    
+    # Check for collision with other gems below
+    jal check_collision_below
+    beqz $v0, collisions_done  # No collision, continue
+    
+land_col:
+    jal land_column            # Land the column
+    
+collisions_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+check_collision_below:
+    # Check if the current column would collide if moved down
+    # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check position below the entire column (y+3)
+    addi $a1, $a1, 3
+    li $t0, 32
+    bge $a1, $t0, collision_detected  # Would hit bottom of screen
+    
+    jal load_gem
+    bnez $v0, collision_detected      # Space below column has another gem
+    
+    li $v0, 0                       # No collision
+    j collision_return
+    
+collision_detected:
+    li $v0, 1                       # Collision detected
+    
+collision_return:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# ==================== SIDE COLLISION DETECTION ====================
+
+check_collision_left:
+    # Check if moving left would cause collision
+    # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check left wall
+    ble $a0, 1, collision_left_detected  # At left edge (x=1 is left border)
+    
+    # Check ALL THREE gems to the left
+    # Check top gem left (x-1, y)
+    addi $a0, $a0, -1
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    # Check middle gem left (x-1, y+1)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, -1
+    addi $a1, $a1, 1
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    # Check bottom gem left (x-1, y+2)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, -1
+    addi $a1, $a1, 2
+    jal load_gem
+    bnez $v0, collision_left_detected
+    
+    li $v0, 0                       # No collision
+    j collision_left_return
+    
+collision_left_detected:
+    li $v0, 1                       # Collision detected
+    
+collision_left_return:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+check_collision_right:
+    # Check if moving right would cause collision
+    # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check right wall
+    li $t0, 11
+    bge $a0, $t0, collision_right_detected  # At right edge (x=11 is right border)
+    
+    # Check ALL THREE gems to the right
+    # Check top gem right (x+1, y)
+    addi $a0, $a0, 1
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    # Check middle gem right (x+1, y+1)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, 1
+    addi $a1, $a1, 1
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    # Check bottom gem right (x+1, y+2)
+    lw $a0, current_x
+    lw $a1, current_y
+    addi $a0, $a0, 1
+    addi $a1, $a1, 2
+    jal load_gem
+    bnez $v0, collision_right_detected
+    
+    li $v0, 0                       # No collision
+    j collision_right_return
+    
+collision_right_detected:
+    li $v0, 1                       # Collision detected
+    
+collision_right_return:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+   
+# ==================== UTILITY FUNCTIONS ====================
 draw_unit:
     # a0 = x (0-31), a1 = y (0-31), a2 = color index (0-8)
     addi $sp, $sp, -4
@@ -296,6 +526,40 @@ draw_unit:
     addi $sp, $sp, 4
     jr $ra
 
+land_column:
+    # Store current column in playing_field as frozen gems
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    la $s0, column_colors
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Store top gem
+    lw $a2, 0($s0)              # Top color
+    jal store_gem
+    
+    # Store middle gem  
+    lw $a2, 4($s0)              # Middle color
+    addi $a1, $a1, 1            # y+1
+    jal store_gem
+    
+    # Store bottom gem
+    lw $a2, 8($s0)              # Bottom color  
+    addi $a1, $a1, 1            # y+2
+    jal store_gem
+    
+    # Generate new random column at top
+    jal generate_random_colors
+    li $t0, 6
+    sw $t0, current_x           # Reset to middle
+    li $t0, 1
+    sw $t0, current_y           # Reset to top
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra    
+    
 # ==================== DISPLAY LAYOUT ====================
 # Playing Field: x=0-12, y=0-31 (13 columns x 32 rows)
 # Score Area: x=13-31, y=0-31 (19 columns x 32 rows)
