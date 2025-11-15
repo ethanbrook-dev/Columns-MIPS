@@ -94,16 +94,18 @@ move_right_done:
     jr $ra
 
 move_down:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
     lw $t0, current_y
     li $t1, 28
-    bge $t0, $t1, check_land    # If near bottom, check if we should land
+    bge $t0, $t1, land_col    # If at bottom, we should land
     
     # Check for collision below
     jal check_collision_below
     beqz $v0, move_down_ok      # No collision, move down normally
     
-check_land:
-    # We have collision or at bottom - land the column
+land_col:
     jal land_column
     j move_down_done
 
@@ -113,6 +115,8 @@ move_down_ok:
     sw $t0, current_y
 
 move_down_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 
 shuffle_column:
@@ -340,6 +344,9 @@ frozen_skip:
 check_collision_below:
     # Check if the current column would collide if moved down
     # Returns: v0 = 1 if collision, 0 if no collision
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
     lw $a0, current_x
     lw $a1, current_y
     
@@ -352,12 +359,17 @@ check_collision_below:
     bnez $v0, collision_bottom      # Hit another gem
     
     li $v0, 0                       # No collision
-    jr $ra
+    j collision_return
     
 collision_bottom:
     li $v0, 1                       # Collision detected
-    jr $ra
+    j collision_return
 
+collision_return:
+   lw $ra, 0($sp)
+   addi $sp, $sp, 4
+   jr $ra
+   
 land_column:
     # Store current column in playing_field as frozen gems
     addi $sp, $sp, -4
