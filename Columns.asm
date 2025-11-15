@@ -8,7 +8,7 @@
 # Memory
 ADDR_DSPL: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
-playing_field: .space 1664  # 13 cols x 32 rows x 4 bytes = 1664 hence .space 1664
+playing_field: .word 0:416    # 13×32 = 416 positions, all initialized to 0
 
 # Colors
 colors:
