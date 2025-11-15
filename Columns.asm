@@ -96,9 +96,22 @@ move_right_done:
 move_down:
     lw $t0, current_y
     li $t1, 28
-    bge $t0, $t1, move_down_done    # Don't move down if at bottom (y=29)
+    bge $t0, $t1, check_land    # If near bottom, check if we should land
+    
+    # Check for collision below
+    jal check_collision_below
+    beqz $v0, move_down_ok      # No collision, move down normally
+    
+check_land:
+    # We have collision or at bottom - land the column
+    jal land_column
+    j move_down_done
+
+move_down_ok:
+    lw $t0, current_y
     addi $t0, $t0, 1
     sw $t0, current_y
+
 move_down_done:
     jr $ra
 
@@ -121,7 +134,6 @@ quit_game:
     syscall
 
 # ==================== CORE FUNCTIONS ====================
-
 draw_screen:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
@@ -129,6 +141,7 @@ draw_screen:
     jal clear_screen
     jal draw_playing_field_border
     jal draw_score_area
+    jal draw_frozen_gems
     jal draw_current_column
     
     lw $ra, 0($sp)
@@ -247,7 +260,7 @@ draw_current_column:
     # Load column position
     lw $a0, current_x        # Grid X (0-12)
     lw $a1, current_y        # Grid Y (0-31)
-    la $s0, column_colors    # Color arraya
+    la $s0, column_colors    # Color array
 
     # Draw top gem
     lw $a2, 0($s0)           # Color index
@@ -266,6 +279,118 @@ draw_current_column:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
+
+# ==================== FROZEN GEM FUNCTIONS ====================
+
+store_gem:
+    # a0 = x (0-12), a1 = y (0-31), a2 = color index (1-6)
+    la $t0, playing_field        # Base address of playing field
+    li $t1, 13                   # Grid width (13 columns)
+    mul $t2, $a1, $t1           # y * 13
+    add $t2, $t2, $a0           # + x
+    sll $t2, $t2, 2             # * 4 bytes
+    add $t2, $t0, $t2           # Final address in playing_field
+    
+    sw $a2, 0($t2)              # Store color index at calculated address
+    jr $ra
+
+load_gem:
+    # a0 = x (0-12), a1 = y (0-31)
+    # returns: v0 = color index (0 if empty)
+    la $t0, playing_field        # Base address of playing field
+    li $t1, 13                   # Grid width (13 columns)
+    mul $t2, $a1, $t1           # y * 13
+    add $t2, $t2, $a0           # + x
+    sll $t2, $t2, 2             # * 4 bytes
+    add $t2, $t0, $t2           # Final address in playing_field
+    
+    lw $v0, 0($t2)              # Load color index from address
+    jr $ra
+
+draw_frozen_gems:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    li $a1, 0                   # Start from y=0
+frozen_y_loop:
+    li $a0, 0                   # Start from x=0  
+frozen_x_loop:
+    jal load_gem                # Check if cell has gem
+    beqz $v0, frozen_skip       # Skip if empty (0)
+    
+    # Draw the frozen gem
+    move $a2, $v0               # Color index
+    jal draw_unit
+    
+frozen_skip:
+    addi $a0, $a0, 1
+    li $t0, 13
+    blt $a0, $t0, frozen_x_loop # Loop through x=0-12
+    
+    addi $a1, $a1, 1
+    li $t0, 32
+    blt $a1, $t0, frozen_y_loop # Loop through y=0-31
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# ==================== COLLISION DETECTION ====================
+
+check_collision_below:
+    # Check if the current column would collide if moved down
+    # Returns: v0 = 1 if collision, 0 if no collision
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Check bottom gem (y+2 position)
+    addi $a1, $a1, 2
+    li $t0, 32
+    bge $a1, $t0, collision_bottom  # Hit bottom of screen
+    
+    jal load_gem
+    bnez $v0, collision_bottom      # Hit another gem
+    
+    li $v0, 0                       # No collision
+    jr $ra
+    
+collision_bottom:
+    li $v0, 1                       # Collision detected
+    jr $ra
+
+land_column:
+    # Store current column in playing_field as frozen gems
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    la $s0, column_colors
+    lw $a0, current_x
+    lw $a1, current_y
+    
+    # Store top gem
+    lw $a2, 0($s0)              # Top color
+    jal store_gem
+    
+    # Store middle gem  
+    lw $a2, 4($s0)              # Middle color
+    addi $a1, $a1, 1            # y+1
+    jal store_gem
+    
+    # Store bottom gem
+    lw $a2, 8($s0)              # Bottom color  
+    addi $a1, $a1, 1            # y+2
+    jal store_gem
+    
+    # Generate new random column at top
+    jal generate_random_colors
+    li $t0, 6
+    sw $t0, current_x           # Reset to middle
+    li $t0, 1
+    sw $t0, current_y           # Reset to top
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra    
 
 # ==================== UTILITY FUNCTIONS ====================
 
