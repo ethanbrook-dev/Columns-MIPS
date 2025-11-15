@@ -278,6 +278,8 @@ draw_current_column:
     lw $a0, current_x        # Grid X (0-12)
     lw $a1, current_y        # Grid Y (0-31)
     la $s0, column_colors    # Color array
+    
+    # Also in here after check if you made a new column but it automatically collides (occupied) because if so we gotta take the user to the game over screen or smth
 
     # Draw top gem
     lw $a2, 0($s0)           # Color index
