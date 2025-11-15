@@ -35,6 +35,7 @@ main:
     jal generate_random_colors
 game_loop:
     jal handle_keyboard_controls
+    jal check_collisions
     jal draw_screen
     
     # --- delay for 60 FPS ---
@@ -96,20 +97,17 @@ move_right_done:
 move_down:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
-
+    
+    # Check if we're at the bottom
     lw $t0, current_y
     li $t1, 28
-    bge $t0, $t1, land_col    # If at bottom, we should land
+    bge $t0, $t1, move_down_done    # Don't move down if at bottom
     
     # Check for collision below
     jal check_collision_below
-    beqz $v0, move_down_ok      # No collision, move down normally
+    bnez $v0, move_down_done        # Don't move down if collision
     
-land_col:
-    jal land_column
-    j move_down_done
-
-move_down_ok:
+    # No collision, move down
     lw $t0, current_y
     addi $t0, $t0, 1
     sw $t0, current_y
@@ -340,6 +338,26 @@ frozen_skip:
     jr $ra
 
 # ==================== COLLISION DETECTION ====================
+check_collisions:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # Check if we're at the bottom of the screen
+    lw $t0, current_y
+    li $t1, 28
+    bge $t0, $t1, land_col    # If at bottom, land automatically
+    
+    # Check for collision with other gems below
+    jal check_collision_below
+    beqz $v0, collisions_done  # No collision, continue
+    
+land_col:
+    jal land_column            # Land the column
+    
+collisions_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
 
 check_collision_below:
     # Check if the current column would collide if moved down
@@ -350,25 +368,24 @@ check_collision_below:
     lw $a0, current_x
     lw $a1, current_y
     
-    # Check bottom gem (y+2 position)
-    addi $a1, $a1, 2
+    # Check position below the entire column (y+3)
+    addi $a1, $a1, 3
     li $t0, 32
-    bge $a1, $t0, collision_bottom  # Hit bottom of screen
+    bge $a1, $t0, collision_detected  # Would hit bottom of screen
     
     jal load_gem
-    bnez $v0, collision_bottom      # Hit another gem
+    bnez $v0, collision_detected      # Space below column has another gem
     
     li $v0, 0                       # No collision
     j collision_return
     
-collision_bottom:
+collision_detected:
     li $v0, 1                       # Collision detected
-    j collision_return
-
+    
 collision_return:
-   lw $ra, 0($sp)
-   addi $sp, $sp, 4
-   jr $ra
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
    
 land_column:
     # Store current column in playing_field as frozen gems
