@@ -9,6 +9,8 @@
 ADDR_DSPL: .word 0x10008000
 ADDR_KBRD: .word 0xffff0000
 playing_field: .word 0:416    # 13×32 = 416 positions, all initialized to 0
+match_mask: .word 0:416     # 13 × 32 mask array, 0 = no match, 1 = part of a match
+
 
 # Colors
 colors:
@@ -30,12 +32,20 @@ column_colors: .word 0, 0, 0  # Will be filled with random colors
 .text
 .globl main
 
+
 main:
     # Initialize static game scene (if we make any)
     jal generate_random_colors
 game_loop:
     jal handle_keyboard_controls
     jal check_collisions
+
+    # NEW: clear any matches and apply gravity
+    jal clear_matches_and_gravity
+
+    # NEW: check for game over (gems at top row)
+    jal check_game_over
+
     jal draw_screen
     
     # --- delay for 60 FPS ---
@@ -45,6 +55,7 @@ game_loop:
     # ------------------------
     
     j game_loop
+
 
 handle_keyboard_controls:
     lw $t0, ADDR_KBRD               # Setting $t0 = base address for keyboard
@@ -353,6 +364,285 @@ frozen_skip:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
+clear_match_mask:
+    la  $t0, match_mask
+    li  $t1, 416        # number of cells
+    li  $t2, 0
+clear_mask_loop:
+    sw  $zero, 0($t0)
+    addi $t0, $t0, 4
+    addi $t2, $t2, 1
+    blt $t2, $t1, clear_mask_loop
+    jr  $ra
+store_mask:
+    # a0 = x, a1 = y, a2 = value (0 or 1)
+    la  $t0, match_mask
+    li  $t1, 13
+    mul $t2, $a1, $t1     # y * 13
+    add $t2, $t2, $a0     # + x
+    sll $t2, $t2, 2       # *4
+    add $t2, $t0, $t2
+    sw  $a2, 0($t2)
+    jr  $ra
+mark_matches:
+    addi $sp, $sp, -16
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+    sw   $s1, 8($sp)
+    sw   $s2, 12($sp)
+
+    # Start with a clean mask
+    jal  clear_match_mask
+
+    li   $s2, 0          # match_flag = 0
+
+    ############################
+    # Vertical scan (x fixed)
+    ############################
+    li   $s0, 0          # x = 0..12
+vert_x_loop:
+    li   $s1, 0          # y = 0..29 (start of triple)
+vert_y_loop:
+    li   $t0, 29
+    bgt  $s1, $t0, vert_y_done
+
+    # c0 = gem(x, y)
+    move $a0, $s0
+    move $a1, $s1
+    jal  load_gem
+    move $t3, $v0
+    blez $t3, vert_y_next       # empty or 0 => no triple starting here
+
+    # c1 = gem(x, y+1)
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal  load_gem
+    move $t4, $v0
+    bne  $t3, $t4, vert_y_next
+
+    # c2 = gem(x, y+2)
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal  load_gem
+    move $t5, $v0
+    bne  $t3, $t5, vert_y_next
+
+    # Found vertical triple
+    li   $s2, 1
+
+    # Mark (x, y), (x, y+1), (x, y+2)
+    move $a0, $s0
+    move $a1, $s1
+    li   $a2, 1
+    jal  store_mask
+
+    move $a0, $s0
+    addi $a1, $s1, 1
+    li   $a2, 1
+    jal  store_mask
+
+    move $a0, $s0
+    addi $a1, $s1, 2
+    li   $a2, 1
+    jal  store_mask
+
+vert_y_next:
+    addi $s1, $s1, 1
+    j    vert_y_loop
+
+vert_y_done:
+    addi $s0, $s0, 1
+    li   $t1, 12
+    ble  $s0, $t1, vert_x_loop
+
+    ############################
+    # Horizontal scan (y fixed)
+    ############################
+    li   $s0, 0          # y = 0..31
+horiz_y_loop:
+    li   $t0, 31
+    bgt  $s0, $t0, horiz_done
+
+    li   $s1, 0          # x = 0..10 (start of triple)
+horiz_x_loop:
+    li   $t1, 10
+    bgt  $s1, $t1, horiz_x_done
+
+    # c0 = gem(x, y)
+    move $a0, $s1
+    move $a1, $s0
+    jal  load_gem
+    move $t3, $v0
+    blez $t3, horiz_x_next
+
+    # c1 = gem(x+1, y)
+    addi $a0, $s1, 1
+    move $a1, $s0
+    jal  load_gem
+    move $t4, $v0
+    bne  $t3, $t4, horiz_x_next
+
+    # c2 = gem(x+2, y)
+    addi $a0, $s1, 2
+    move $a1, $s0
+    jal  load_gem
+    move $t5, $v0
+    bne  $t3, $t5, horiz_x_next
+
+    # Found horizontal triple
+    li   $s2, 1
+
+    # Mark (x, y), (x+1, y), (x+2, y)
+    move $a0, $s1
+    move $a1, $s0
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s1, 1
+    move $a1, $s0
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s1, 2
+    move $a1, $s0
+    li   $a2, 1
+    jal  store_mask
+
+horiz_x_next:
+    addi $s1, $s1, 1
+    j    horiz_x_loop
+
+horiz_x_done:
+    addi $s0, $s0, 1
+    j    horiz_y_loop
+
+horiz_done:
+    move $v0, $s2       # return 1 if any matches, 0 otherwise
+
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    addi $sp, $sp, 16
+    jr   $ra
+remove_marked_and_apply_gravity:
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+
+    ########################
+    # Pass 1: clear matches
+    ########################
+    li   $a1, 0          # y = 0..31
+rm_y_loop:
+    li   $a0, 0          # x = 0..12
+rm_x_loop:
+    # mask[x, y]
+    la   $t0, match_mask
+    li   $t1, 13
+    mul  $t2, $a1, $t1
+    add  $t2, $t2, $a0
+    sll  $t2, $t2, 2
+    add  $t2, $t0, $t2
+    lw   $t3, 0($t2)
+    beqz $t3, rm_x_next      # if mask == 0, skip
+
+    # Set gem(x, y) to 0 (empty)
+    li   $a2, 0
+    jal  store_gem
+
+rm_x_next:
+    addi $a0, $a0, 1
+    li   $t4, 13
+    blt  $a0, $t4, rm_x_loop
+
+    addi $a1, $a1, 1
+    li   $t5, 32
+    blt  $a1, $t5, rm_y_loop
+
+    ########################
+    # Pass 2: gravity
+    ########################
+    li   $t6, 0          # x = 0..12
+grav_x_loop:
+    li   $t7, 30         # write_y = bottom
+    li   $t8, 30         # y = bottom, count down
+
+grav_y_loop:
+    # c = gem(x, y)
+    move $a0, $t6
+    move $a1, $t8
+    jal  load_gem
+    beqz $v0, grav_y_next     # empty => skip
+
+    # If y != write_y, move gem down
+    beq  $t8, $t7, grav_no_move
+
+    # store gem at (x, write_y)
+    move $a0, $t6
+    move $a1, $t7
+    move $a2, $v0
+    jal  store_gem
+
+    # zero old spot (x, y)
+    move $a0, $t6
+    move $a1, $t8
+    li   $a2, 0
+    jal  store_gem
+
+grav_no_move:
+    addi $t7, $t7, -1          # write_y--
+
+grav_y_next:
+    addi $t8, $t8, -1          # y--
+    bgez $t8, grav_y_loop
+
+    # next column
+    addi $t6, $t6, 1
+    li   $t9, 13
+    blt  $t6, $t9, grav_x_loop
+
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
+clear_matches_and_gravity:
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+
+match_loop:
+    jal  mark_matches
+    beqz $v0, match_done       # if no matches, stop
+    jal  remove_marked_and_apply_gravity
+    j    match_loop            # repeat – chain reactions!
+
+match_done:
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
+
+check_game_over:
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+
+    li   $a1, 1          # y = 1 (top playable row)
+    li   $a0, 1          # x = 1..11 (inside walls)
+game_over_x_loop:
+    jal  load_gem
+    bnez $v0, game_over_now   # any gem here => game over
+
+    addi $a0, $a0, 1
+    li   $t0, 11
+    ble  $a0, $t0, game_over_x_loop
+
+    # no gem on top row
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr   $ra
+
+game_over_now:
+    # Clean stack then exit
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    j    quit_game          # calls syscall 10
 
 # ==================== BOTTOM  COLLISION DETECTION ====================
 check_collisions:
