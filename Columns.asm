@@ -517,7 +517,137 @@ horiz_x_done:
     j    horiz_y_loop
 
 horiz_done:
-    move $v0, $s2       # return 1 if any matches, 0 otherwise
+
+    ############################
+    # Diagonal scan: \ (down-right)
+    ############################
+    li   $s0, 0          # x = 0..10
+diag_dr_x_loop:
+    li   $t0, 10
+    bgt  $s0, $t0, diag_dr_done
+
+    li   $s1, 0          # y = 0..29
+diag_dr_y_loop:
+    li   $t1, 29
+    bgt  $s1, $t1, diag_dr_next_x
+
+    # c0 = gem(x, y)
+    move $a0, $s0
+    move $a1, $s1
+    jal  load_gem
+    move $t3, $v0
+    blez $t3, diag_dr_y_next
+
+    # c1 = gem(x+1, y+1)
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    jal  load_gem
+    move $t4, $v0
+    bne  $t3, $t4, diag_dr_y_next
+
+    # c2 = gem(x+2, y+2)
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    jal  load_gem
+    move $t5, $v0
+    bne  $t3, $t5, diag_dr_y_next
+
+    # Found diagonal \ triple
+    li   $s2, 1
+
+    # Mark (x, y), (x+1, y+1), (x+2, y+2)
+    move $a0, $s0
+    move $a1, $s1
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    li   $a2, 1
+    jal  store_mask
+
+diag_dr_y_next:
+    addi $s1, $s1, 1
+    j    diag_dr_y_loop
+
+diag_dr_next_x:
+    addi $s0, $s0, 1
+    j    diag_dr_x_loop
+
+diag_dr_done:
+
+    ############################
+    # Diagonal scan: / (up-right)
+    ############################
+    li   $s0, 0          # x = 0..10
+diag_ur_x_loop:
+    li   $t0, 10
+    bgt  $s0, $t0, diag_ur_done
+
+    li   $s1, 2          # y = 2..31 (need y-2 >= 0)
+diag_ur_y_loop:
+    li   $t1, 31
+    bgt  $s1, $t1, diag_ur_next_x
+
+    # c0 = gem(x, y)
+    move $a0, $s0
+    move $a1, $s1
+    jal  load_gem
+    move $t3, $v0
+    blez $t3, diag_ur_y_next
+
+    # c1 = gem(x+1, y-1)
+    addi $a0, $s0, 1
+    addi $a1, $s1, -1
+    jal  load_gem
+    move $t4, $v0
+    bne  $t3, $t4, diag_ur_y_next
+
+    # c2 = gem(x+2, y-2)
+    addi $a0, $s0, 2
+    addi $a1, $s1, -2
+    jal  load_gem
+    move $t5, $v0
+    bne  $t3, $t5, diag_ur_y_next
+
+    # Found diagonal / triple
+    li   $s2, 1
+
+    # Mark (x, y), (x+1, y-1), (x+2, y-2)
+    move $a0, $s0
+    move $a1, $s1
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s0, 1
+    addi $a1, $s1, -1
+    li   $a2, 1
+    jal  store_mask
+
+    addi $a0, $s0, 2
+    addi $a1, $s1, -2
+    li   $a2, 1
+    jal  store_mask
+
+diag_ur_y_next:
+    addi $s1, $s1, 1
+    j    diag_ur_y_loop
+
+diag_ur_next_x:
+    addi $s0, $s0, 1
+    j    diag_ur_x_loop
+
+diag_ur_done:
+
+    ############################
+    # Return: did we find any?
+    ############################
+    move $v0, $s2       # 1 if any match, 0 otherwise
 
     lw   $ra, 0($sp)
     lw   $s0, 4($sp)
@@ -525,6 +655,7 @@ horiz_done:
     lw   $s2, 12($sp)
     addi $sp, $sp, 16
     jr   $ra
+
 remove_marked_and_apply_gravity:
     addi $sp, $sp, -4
     sw   $ra, 0($sp)
