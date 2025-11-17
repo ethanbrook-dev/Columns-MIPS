@@ -1,7 +1,18 @@
-################# CSC258 Assembly Project - Milestone 1 ###################
-# Static Scene: Playing Field + Random Color Column
-# Playing Field: x=0-12, y=0-31 (13x32 units)
-# Score Area: x=13-31, y=0-31
+################# CSC258 Assembly Final Project ###################
+# This file contains our implementation of Columns.
+#
+# Student 1: Ethan Brook, 1010976295
+# Student 2: Juhwan Son, 1007334724
+#
+# We assert that the code submitted here is entirely our own 
+# creation, and will indicate otherwise when it is not.
+#
+######################## Bitmap Display Configuration ########################
+# - Unit width in pixels:       8
+# - Unit height in pixels:      8
+# - Display width in pixels:    256
+# - Display height in pixels:   256
+# - Base Address for Display:   0x10008000 ($gp)
 ##############################################################################
 
 .data
