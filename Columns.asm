@@ -45,25 +45,20 @@ column_colors: .word 0, 0, 0  # Will be filled with random colors
 
 
 main:
-    # Initialize static game scene (if we make any)
+    # Initialize static game scene (todo later maybe as a feature)
     jal generate_random_colors
 game_loop:
     jal handle_keyboard_controls
     jal check_collisions
 
-    # NEW: clear any matches and apply gravity
     jal clear_matches_and_gravity
-
-    # NEW: check for game over (gems at top row)
     jal check_game_over
 
     jal draw_screen
     
-    # --- delay for 60 FPS ---
-    li $v0, 32        # syscall 32 = sleep
-    li $a0, 16        # ~16 milliseconds per frame
+    li $v0, 32        # syscall 32 is the cmd for sleep
+    li $a0, 16        # ~16 milliseconds per frame = 60FPS
     syscall
-    # ------------------------
     
     j game_loop
 
@@ -407,12 +402,10 @@ mark_matches:
 
     li   $s2, 0          # match_flag = 0
 
-    ############################
     # Vertical scan (x fixed)
-    ############################
-    li   $s0, 0          # x = 0..12
+    li   $s0, 0
 vert_x_loop:
-    li   $s1, 0          # y = 0..29 (start of triple)
+    li   $s1, 0
 vert_y_loop:
     li   $t0, 29
     bgt  $s1, $t0, vert_y_done
@@ -466,15 +459,13 @@ vert_y_done:
     li   $t1, 12
     ble  $s0, $t1, vert_x_loop
 
-    ############################
     # Horizontal scan (y fixed)
-    ############################
-    li   $s0, 0          # y = 0..31
+    li   $s0, 0
 horiz_y_loop:
     li   $t0, 31
     bgt  $s0, $t0, horiz_done
 
-    li   $s1, 0          # x = 0..10 (start of triple)
+    li   $s1, 0
 horiz_x_loop:
     li   $t1, 10
     bgt  $s1, $t1, horiz_x_done
@@ -529,15 +520,13 @@ horiz_x_done:
 
 horiz_done:
 
-    ############################
     # Diagonal scan: \ (down-right)
-    ############################
-    li   $s0, 0          # x = 0..10
+    li   $s0, 0
 diag_dr_x_loop:
     li   $t0, 10
     bgt  $s0, $t0, diag_dr_done
 
-    li   $s1, 0          # y = 0..29
+    li   $s1, 0
 diag_dr_y_loop:
     li   $t1, 29
     bgt  $s1, $t1, diag_dr_next_x
@@ -592,15 +581,13 @@ diag_dr_next_x:
 
 diag_dr_done:
 
-    ############################
     # Diagonal scan: / (up-right)
-    ############################
-    li   $s0, 0          # x = 0..10
+    li   $s0, 0
 diag_ur_x_loop:
     li   $t0, 10
     bgt  $s0, $t0, diag_ur_done
 
-    li   $s1, 2          # y = 2..31 (need y-2 >= 0)
+    li   $s1, 2
 diag_ur_y_loop:
     li   $t1, 31
     bgt  $s1, $t1, diag_ur_next_x
@@ -655,9 +642,6 @@ diag_ur_next_x:
 
 diag_ur_done:
 
-    ############################
-    # Return: did we find any?
-    ############################
     move $v0, $s2       # 1 if any match, 0 otherwise
 
     lw   $ra, 0($sp)
@@ -671,9 +655,7 @@ remove_marked_and_apply_gravity:
     addi $sp, $sp, -4
     sw   $ra, 0($sp)
 
-    ########################
-    # Pass 1: clear matches
-    ########################
+    # Clear matches ----------------------------------- Step 1
     li   $a1, 0          # y = 0..31
 rm_y_loop:
     li   $a0, 0          # x = 0..12
@@ -701,9 +683,7 @@ rm_x_next:
     li   $t5, 32
     blt  $a1, $t5, rm_y_loop
 
-    ########################
-    # Pass 2: gravity
-    ########################
+    # Gravity ----------------------------------- Step 2
     li   $t6, 0          # x = 0..12
 grav_x_loop:
     li   $t7, 30         # write_y = bottom
@@ -732,7 +712,7 @@ grav_y_loop:
     jal  store_gem
 
 grav_no_move:
-    addi $t7, $t7, -1          # write_y--
+    addi $t7, $t7, -1
 
 grav_y_next:
     addi $t8, $t8, -1          # y--
@@ -754,7 +734,7 @@ match_loop:
     jal  mark_matches
     beqz $v0, match_done       # if no matches, stop
     jal  remove_marked_and_apply_gravity
-    j    match_loop            # repeat – chain reactions!
+    j    match_loop            # repeat because we can also have chain reactions
 
 match_done:
     lw   $ra, 0($sp)
@@ -765,7 +745,7 @@ check_game_over:
     addi $sp, $sp, -4
     sw   $ra, 0($sp)
 
-    li   $a1, 1          # y = 1 (top playable row)
+    li   $a1, 1          # y = 1 
     li   $a0, 1          # x = 1..11 (inside walls)
 game_over_x_loop:
     jal  load_gem
