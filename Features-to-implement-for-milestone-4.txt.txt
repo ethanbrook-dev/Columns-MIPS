@@ -1,0 +1,13 @@
+Feature Set for Milestone 4
+
+-> 3 easy features + 1 hard feature
+
+Easy features we should implement:
+
+1) Easy Feature #1: Implement gravity (auto gravity).
+2) Easy Feature #4: Game Over screen - 'q' = game over screen.
+3)Easy Feature #6: Pause functionality - 'p' = take to pause screen, 'p' a second time = unpause.
+
+Hard Feature (choose 1):
+
+1) Hard Feature #1: Track and display score IN PIXELS
